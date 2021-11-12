@@ -20,6 +20,10 @@ type Model struct {
 	// YOffset is the vertical scroll position.
 	YOffset int
 
+	// XOffset is the horizontal scroll position.
+	XOffset    int
+	XOffsetMax int
+
 	// YPosition is the position of the viewport in relation to the terminal
 	// window. It's used in high performance rendering only.
 	YPosition int
@@ -34,7 +38,8 @@ type Model struct {
 	// which is usually via the alternate screen buffer.
 	HighPerformanceRendering bool
 
-	lines []string
+	NoWrap bool
+	lines  []string
 }
 
 // AtTop returns whether or not the viewport is in the very top position.
@@ -75,6 +80,13 @@ func (m *Model) SetContent(s string) {
 	if m.YOffset > len(m.lines)-1 {
 		m.GotoBottom()
 	}
+
+	for _, line := range m.lines {
+		ll := len(line)
+		if ll > m.XOffsetMax {
+			m.XOffsetMax = ll
+		}
+	}
 }
 
 // visibleLines returns the lines that should currently be visible in the
@@ -84,6 +96,18 @@ func (m Model) visibleLines() (lines []string) {
 		top := max(0, m.YOffset)
 		bottom := clamp(m.YOffset+m.Height, top, len(m.lines))
 		lines = m.lines[top:bottom]
+	}
+	if m.NoWrap {
+		for i, line := range lines {
+			if len(line) > m.Width {
+				end := m.XOffset + m.Width - 1
+				if end > len(line) {
+					end = len(line)
+				}
+				lines[i] = line[m.XOffset:end]
+				// panic(fmt.Sprintf("%d %d %d %d %s", m.XOffset, m.Width, i, len(lines[i]), lines[i]))
+			}
+		}
 	}
 	return lines
 }
@@ -278,6 +302,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			lines := m.LineUp(1)
 			if m.HighPerformanceRendering {
 				cmd = ViewUp(m, lines)
+			}
+
+		// Right
+		case "left", "h":
+			m.XOffset--
+			if m.XOffset < 0 {
+				m.XOffset = 0
+			}
+
+		// Right
+		case "right", "l":
+			m.XOffset++
+			if m.XOffset > m.XOffsetMax {
+				m.XOffset = m.XOffsetMax
 			}
 		}
 
